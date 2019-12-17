@@ -1,0 +1,5 @@
+Deepcat is a data structure for storing measurements of the properties of objects. Catalogs of stars are what I had in mind. This supercedes my SciCatalog code.
+
+Deepcat is made to accommodate multiple measurements of the same property, including the uncertainty on each measurement and reference for that measurement. It is intended for catalogs of up to a few hundred, maybe a few thousand objects. After that, I suspect it will scale poorly because it does not use arrays. The tradeoff is that it is flexible and extensible. For example, you could add an attribute to a measurement that gives the date it was made or add a detailed posterior distribution. Just note that these must be json serializable if you want to be able to save the data without modifying the Deepcat code.
+
+Deepcat is intended to be used with Git or similar for version tracking, collaborating, and backup. It will save its output into a directory as a .json file for each object in the catalog. Users should initialize that directory as a Git repository and commit changes as they see fit.
