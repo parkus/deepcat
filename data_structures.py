@@ -3,6 +3,8 @@ from genericpath import exists
 from glob import glob
 from os import remove, mkdir
 from os.path import join as pathjoin
+from astropy.table import Table, MaskedColumn
+from math import nan
 
 import choosers
 
@@ -33,6 +35,30 @@ def unpack_json(s, containers=None, classes=None):
     return d
 
 
+def make_column(name, values, dtype='guess'):
+    good = list(filter(None, values))
+
+    if dtype == 'guess':
+        col = MaskedColumn(good)
+        if 'U' in str(col.dtype):
+            dtype = 'object'
+        else:
+            dtype = str(col.dtype)
+
+    mask = [x is None for x in values]
+    dtype = dtype.lower()
+    if 'i' in dtype or 'f' in dtype:
+        nullval = nan
+    elif 'a' in dtype or 'u' in dtype:
+        nullval = ''
+    elif 'o' in dtype:
+        nullval = None
+    else:
+        raise NotImplementedError('Uh oh.')
+    values = [nullval if v is None else v for v in values]
+    return MaskedColumn(values, name=name, mask=mask, dtype=dtype)
+
+
 class Extensible(object):
     def __init__(self, **kws):
         for key, val in kws.items():
@@ -54,10 +80,11 @@ class Catalog(object):
     def chooser(self, value):
         if type(value) is str:
             try:
-                self.chooser = choosers.__dict__(value)
-            raise KeyError('{} is not a chooser defined in the choosers module.'.format(value))
+                self._chooser = choosers.__dict__(value)
+            except KeyError:
+                raise KeyError('{} is not a chooser defined in the choosers module.'.format(value))
         elif hasattr(value, '__call__'):
-            self.chooser = value
+            self._chooser = value
         else:
             raise ValueError('Chooser can only be set with a string matching the name of a function in the choosers module or a user-defined function.')
 
@@ -129,7 +156,7 @@ class Catalog(object):
         return self.objects[item]
 
     def get(self, object_name, property, choose=True):
-        obj = self.__getattr__(object_name)
+        obj = self[object_name]
         if property not in obj:
             return None
         else:
@@ -142,29 +169,56 @@ class Catalog(object):
             else:
                 return prop.measurements
 
-    def extract_tables(self):
+    def as_tables(self):
         # values, limits, poserr, negerr, refs
-        tables = {'values' : [],
-                  'limits' : [],
-                  'poserr' : [],
-                  'negerr' : [],
-                  'refs' : []}
+        tables = {'value' : {},
+                  'limit' : {},
+                  'errpos' : {},
+                  'errneg' : {},
+                  'ref' : {}}
         props = self.property_names
+
+        # add names of properties as keys (eventually to be column names) in each table dictionary
+        for key in tables.keys():
+            for prop in props:
+                tables[key][prop] = []
 
         # construct lists that will become tables
         for obj in self.objects:
-
-            # add an empty row (just an empty list) for the object to each table
-            for key in tables.keys():
-                tables[key].append([])
-
             # for each property, add the chosen measurement, if any, to the table
             for prop in props:
                 if prop in obj:
                     msmts = obj[prop].measurements
                     if len(msmts) > 0:
                         msmt = self.chooser(msmts)
-                        row.append(msmt.value)
+                        tables['value'][prop].append(msmt.value)
+                        tables['limit'][prop].append(msmt.limit)
+                        tables['errpos'][prop].append(msmt.errpos)
+                        tables['errneg'][prop].append(msmt.errneg)
+                        tables['ref'][prop].append(msmt.reference)
+                        continue
+                for key in tables.keys():
+                    tables[key][prop].append(None)
+
+        # format columns for use in table: set Nones to masked values and infer data types
+        for prop in props:
+            values = tables['value'][prop]
+            tables['value'][prop] = make_column(prop, values)
+
+            values = tables['limit'][prop]
+            tables['limit'][prop] = make_column(prop, values, 'a1')
+
+            values = tables['errpos'][prop]
+            tables['errpos'][prop] = make_column(prop, values, 'f1')
+
+            values = tables['values'][prop]
+            tables['values'][prop] = make_column(prop, values, 'f1')
+
+            values = tables['ref'][prop]
+            tables['ref'][prop] = make_column(prop, values, 'object')
+
+        for key, cols in tables.items():
+            tables[key] = Table(cols, masked=True)
 
 
 class Object(object):
@@ -278,6 +332,14 @@ class Measurement(Extensible):
     @property
     def error(self):
         return self._error
+
+    @property
+    def errneg(self):
+        return self._error[1]
+
+    @property
+    def errpos(self):
+        return self._error[0]
 
     @error.setter
     def error(self, value):
