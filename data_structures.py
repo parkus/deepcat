@@ -41,11 +41,7 @@ class Extensible(object):
 
 class Catalog(object):
     def __init__(self, objects=None, chooser='default'):
-        if objects is None:
-            self.objects = []
-        else:
-            self.objects = objects
-        self.references = {}
+        self.objects = objects
         self.chooser = chooser
         if type(chooser) is str:
             self.chooser = choosers.__dict__(chooser)
@@ -101,6 +97,24 @@ class Catalog(object):
         return Catalog(objects=objs)
 
     @property
+    def objects(self):
+        return self._objects
+
+    @objects.setter
+    def objects(self, value):
+        if value is None:
+            self._objects = {}
+        elif type(value) in (list, tuple):
+            d = {}
+            for obj in value:
+                d[obj.name] = obj
+            self._objects = d
+        elif type(value) is dict:
+            self._objects = value
+        else:
+            raise ValueError('"objects" attribute can only be set with None, a list or tuple, or a dictionary and will be made into a dictionary.')
+
+    @property
     def property_names(self):
         propset = {}
         for obj in self.objects:
@@ -111,26 +125,22 @@ class Catalog(object):
     def object_names(self):
         return [obj.name for obj in self.objects]
 
-    def __getattr__(self, item):
-        objlist = [obj for obj in self.objects if obj.name == item]
-        if len(objlist) == 1:
-            return objlist[0]
-        else:
-            raise AttributeError('{} is not an attribute of the catalog nor an object in the catalog.'.format(item))
+    def __getitem__(self, item):
+        return self.objects[item]
 
     def get(self, object_name, property, choose=True):
         obj = self.__getattr__(object_name)
-        prop = obj.__getattr__(property)
-        if choose:
-            if len(prop.measurements) == 0:
-                return None
-            msmt = self.chooser(prop.measurements)
-            if len(msmts) == 0:
-                raise ValueError('Uh oh, somehow no measurements could be chosen as best with the catalogs chooser.')
-            elif len(msmts) == 1:
-                return msmts[0]
+        if property not in obj:
+            return None
+        else:
+            prop = obj[property]
+            if choose:
+                if len(prop.measurements) == 0:
+                    return None
+                msmt = self.chooser(prop.measurements)
+                return msmt
             else:
-                raise ValueError('Uh oh, the catalog\'s chooser chose multiple measurements as best.')
+                return prop.measurements
 
     def extract_tables(self):
         # values, limits, poserr, negerr, refs
@@ -153,7 +163,7 @@ class Catalog(object):
                 if prop in obj:
                     msmts = obj[prop].measurements
                     if len(msmts) > 0:
-                        msmt = self.chooser(msmts)[0]
+                        msmt = self.chooser(msmts)
                         row.append(msmt.value)
 
 
@@ -211,12 +221,6 @@ class Object(object):
             self.properties[name]
         except KeyError:
             raise KeyError('Object does not have a {} property.'.format(name))
-
-    def __getattr__(self, item):
-        try:
-            return self.get_property(item)
-        except KeyError:
-            raise AttributeError('{} is not an attribute of the object nor a property in the object\'s properties list.'.format(item))
 
     def __getitem__(self, item):
         return self.get_property(item)
