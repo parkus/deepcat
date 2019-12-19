@@ -2,7 +2,7 @@
 from warnings import warn
 
 
-def default_single(measurements):
+def default(measurements):
     if len(measurements) == 0:
         return []
 

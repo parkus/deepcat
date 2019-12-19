@@ -70,7 +70,7 @@ class Catalog(object):
         self.objects = objects
         self.chooser = chooser
         if type(chooser) is str:
-            self.chooser = choosers.__dict__(chooser)
+            self.chooser = choosers.__dict__[chooser]
 
     @property
     def chooser(self):
@@ -80,7 +80,7 @@ class Catalog(object):
     def chooser(self, value):
         if type(value) is str:
             try:
-                self._chooser = choosers.__dict__(value)
+                self._chooser = choosers.__dict__[value]
             except KeyError:
                 raise KeyError('{} is not a chooser defined in the choosers module.'.format(value))
         elif hasattr(value, '__call__'):
@@ -135,10 +135,13 @@ class Catalog(object):
 
     @property
     def objects(self):
-        return self._objects
+        return self._objects.values()
 
     def add_object(self, object):
-        self._objects[object.name] = object
+        try:
+            self._objects[object.name] = object
+        except KeyError:
+            raise KeyError('No {} object in the catalog.'.format(object))
 
     def __add__(self, other):
         if isinstance(other, Object):
@@ -170,10 +173,10 @@ class Catalog(object):
 
     @property
     def object_names(self):
-        return [obj.name for obj in self.objects]
+        return self._objects.keys()
 
     def __getitem__(self, item):
-        return self.objects[item]
+        return self._objects[item]
 
     def get(self, object_name, property, choose=True):
         obj = self[object_name]
@@ -270,7 +273,7 @@ class Object(object):
 
     @property
     def properties(self):
-        return self._properties
+        return self._properties.values()
 
     @properties.setter
     def properties(self, value):
@@ -288,11 +291,11 @@ class Object(object):
 
     @property
     def property_names(self):
-        return self.properties.keys()
+        return self._properties.keys()
 
     def get_property(self, name):
         try:
-            self.properties[name]
+            return self._properties[name]
         except KeyError:
             raise KeyError('Object does not have a {} property.'.format(name))
 
