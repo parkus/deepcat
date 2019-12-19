@@ -5,6 +5,7 @@ from os import remove, mkdir
 from os.path import join as pathjoin
 from astropy.table import Table, MaskedColumn
 from math import nan
+from warnings import warn
 
 from . import choosers
 
@@ -104,6 +105,15 @@ class Catalog(object):
             objects.append(obj)
         return Catalog(objects)
 
+    def add_measurements(self, object_names, property_name, values, errors=None, references=None, limits=None, qualities=None):
+        errors = [None]*len(self) if errors is None else errors
+        references = [None]*len(self) if references is None else references
+        limits = ['=']*len(self) if limits is None else limits
+        qualities = [None]*len(self) if qualities is None else qualities
+        args = zip(object_names, values, errors, references, limits, qualities)
+        for name, v, e, r, l, q in args:
+            self[name][property_name].add_measurement(v, e, r, l, q)
+
     @classmethod
     def read(cls, path):
         obj_paths = cls._get_obj_paths(path)
@@ -155,12 +165,12 @@ class Catalog(object):
 
     @property
     def object_names(self):
-        return self._objects.keys()
+        return list(self._objects.keys())
 
     def __getitem__(self, item):
         return self._objects[item]
 
-    def view_property(self, name):
+    def view(self, name):
         if name not in self.property_names:
             raise KeyError('No {} property for any object in the catalog.'.format(name))
         else:
@@ -179,6 +189,9 @@ class Catalog(object):
 
     def __len__(self):
         return len(self._objects)
+
+    def __delitem__(self, key):
+        del self._objects[key]
 
     def __contains__(self, item):
         return item in self._objects
@@ -203,13 +216,18 @@ class Catalog(object):
                   'limit' : {},
                   'errpos' : {},
                   'errneg' : {},
+                  'quality' : {},
                   'ref' : {}}
         props = self.property_names
 
         # add names of properties as keys (eventually to be column names) in each table dictionary
-        for key in tables.keys():
+        if 'object' in self.property_names:
+            warn('Apparently the objets have a property called object. However, the object column in the tables will give the names of the objects, not their "object.object" property.')
+        for tbl in tables.values():
+            index = MaskedColumn(self.object_names, name='object')
+            tbl['object'] = index
             for prop in props:
-                tables[key][prop] = []
+                tbl[prop] = []
 
         # construct lists that will become tables
         for obj in self.objects:
@@ -223,6 +241,7 @@ class Catalog(object):
                         tables['limit'][prop].append(msmt.limit)
                         tables['errpos'][prop].append(msmt.errpos)
                         tables['errneg'][prop].append(msmt.errneg)
+                        tables['quality'][prop].append(msmt.quality)
                         tables['ref'][prop].append(msmt.reference)
                         continue
                 for key in tables.keys():
@@ -237,16 +256,24 @@ class Catalog(object):
             tables['limit'][prop] = make_column(prop, values, 'a1')
 
             values = tables['errpos'][prop]
-            tables['errpos'][prop] = make_column(prop, values, 'f1')
+            tables['errpos'][prop] = make_column(prop, values, 'float')
 
-            values = tables['values'][prop]
-            tables['values'][prop] = make_column(prop, values, 'f1')
+            values = tables['errneg'][prop]
+            tables['errneg'][prop] = make_column(prop, values, 'float')
+
+            values = tables['quality'][prop]
+            tables['quality'][prop] = make_column(prop, values, 'f2')
 
             values = tables['ref'][prop]
             tables['ref'][prop] = make_column(prop, values, 'object')
 
         for key, cols in tables.items():
             tables[key] = Table(cols, masked=True)
+
+        for tbl in tables.values():
+            tbl.add_index('object')
+
+        return tables
 
 
 class Object(object):
@@ -340,6 +367,9 @@ class Object(object):
             raise ValueError('Can only set a property with a Property object.')
         self.properties[key] = value
 
+    def __delitem__(self, key):
+        del self._properties[key]
+
     def __len__(self):
         return len(self._properties)
 
@@ -430,11 +460,17 @@ class Measurement(Extensible):
 
     @property
     def errneg(self):
-        return self._error[1]
+        if self._error is None:
+            return None
+        else:
+            return self._error[1]
 
     @property
     def errpos(self):
-        return self._error[0]
+        if self._error is None:
+            return None
+        else:
+            return self._error[0]
 
     @error.setter
     def error(self, value):

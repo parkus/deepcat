@@ -8,21 +8,21 @@ def default(measurements):
 
     msmts = nonlimits(measurements)
     if len(msmts) == 1:
-        return msmts
+        return msmts[0]
 
     if len(msmts) == 0:
         msmts = highest_quality(measurements)
         if len(msmts) == 1:
-            return msmts
+            return msmts[0]
 
         msmts = strictest_limit(measurements)
         if len(msmts) == 1:
-            return msmts
+            return msmts[0]
 
     if len(msmts) > 1:
         msmts = highest_quality(measurements)
         if len(msmts) == 1:
-            return msmts
+            return msmts[0]
 
         msmts = most_precise(measurements)
 
