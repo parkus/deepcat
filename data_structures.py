@@ -6,7 +6,7 @@ from os.path import join as pathjoin
 from astropy.table import Table, MaskedColumn
 from math import nan
 
-import choosers
+from . import choosers
 
 
 def pack_json(self, containers=None):
@@ -113,6 +113,16 @@ class Catalog(object):
                 f.write(s)
 
     @classmethod
+    def empty_catalog(cls, object_names, property_names):
+        objects = []
+        for name in object_names:
+            obj = Object(name)
+            props = [Property(n) for n in property_names]
+            obj.properties = props
+            objects.append(obj)
+        return Catalog(objects)
+
+    @classmethod
     def read(cls, path):
         obj_paths = cls._get_obj_paths(path)
         objs = []
@@ -126,6 +136,16 @@ class Catalog(object):
     @property
     def objects(self):
         return self._objects
+
+    def add_object(self, object):
+        self._objects[object.name] = object
+
+    def __add__(self, other):
+        if isinstance(other, Object):
+            self._objects[other.name] = other
+        elif isinstance(other, Catalog):
+            objects = {**self._objects, **other._objects}
+            return Catalog(objects, chooser=self.chooser)
 
     @objects.setter
     def objects(self, value):
@@ -276,6 +296,13 @@ class Object(object):
         except KeyError:
             raise KeyError('Object does not have a {} property.'.format(name))
 
+    def __add__(self, other):
+        if isinstance(other, Property):
+            self._properties[other.name] = other
+        elif isinstance(other, Object):
+            props = {**self._properties, **other._properties}
+            return Object(props)
+
     def __getitem__(self, item):
         return self.get_property(item)
 
@@ -311,8 +338,9 @@ class Property(Extensible):
             rep += 'no measurements'
         return rep
 
-    def collapsed(self, method='pick'):
-        pass
+    def add_measurement(self, value, error=None, reference=None, limit='=', quality=None, **kws):
+        msmt = Measurement(value, error, reference, limit, quality, **kws)
+        self.measurements.append(msmt)
 
 
 class Measurement(Extensible):

@@ -1,1 +1,1 @@
-from data_structures import Measurement, Object, Property, Catalog
+from .data_structures import Measurement, Object, Property, Catalog
