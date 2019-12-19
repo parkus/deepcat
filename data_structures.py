@@ -72,6 +72,12 @@ class Catalog(object):
         if type(chooser) is str:
             self.chooser = choosers.__dict__[chooser]
 
+    @classmethod
+    def from_catalog(cls, catalog):
+        """This is just to make upgrading catalogs to new versions easier as I debug the code."""
+        objects = [Object.from_object(obj) for obj in catalog.objects]
+        return Catalog(objects, catalog._chooser)
+
     @property
     def chooser(self):
         return self._chooser
@@ -100,7 +106,8 @@ class Catalog(object):
                 for opath in obj_paths:
                     remove(opath)
                 print("Updating object files in specified path. You might want to do a Git commit or equivalent in the directory you specified.")
-            raise ValueError('Path exists. User overwrite=True ot overwrite.')
+            else:
+                raise ValueError('Path exists. User overwrite=True ot overwrite.')
         else:
             mkdir(path)
             print("Created a new directory for the catalog at \n{}\nYou might want to initiliaze a version control system in that directory now.".format(path))
@@ -166,9 +173,9 @@ class Catalog(object):
 
     @property
     def property_names(self):
-        propset = {}
-        for obj in self.objects:
-            propset += set(obj.propnames)
+        propset = set()
+        for obj in self._objects.values():
+            propset = propset | set(obj.property_names)
         return list(propset)
 
     @property
@@ -177,6 +184,29 @@ class Catalog(object):
 
     def __getitem__(self, item):
         return self._objects[item]
+
+    def view_property(self, name):
+        if name not in self.property_names:
+            raise KeyError('No {} property for any object in the catalog.'.format(name))
+        else:
+            props = []
+            for oname, obj in self._objects.items():
+                if name in obj:
+                    prop = obj[name]
+                    rep = '{}: '.format(oname)
+                    rep += ', '.join(map(str, prop.measurements))
+                    props.append(rep)
+                else:
+                    props.append('No {} property defined.'.format(name))
+        print(name)
+        print('='*len(name))
+        [print(p) for p in props]
+
+    def __len__(self):
+        return len(self._objects)
+
+    def __contains__(self, item):
+        return item in self._objects
 
     def get(self, object_name, property, choose=True):
         obj = self[object_name]
@@ -253,11 +283,17 @@ class Object(object):
             self.properties = properties
 
     def to_json(self):
-        return pack_json(self, ['properties'])
+        return pack_json(self, ['_properties'])
+
+    @classmethod
+    def from_object(cls, object):
+        props = [Property.from_property(p) for p in object.properties]
+        return Object(object.name, props)
+
 
     @classmethod
     def from_json(cls, s):
-        d = unpack_json(s, ['properties'], [Property])
+        d = unpack_json(s, ['_properties'], [Property])
         return Object(**d)
 
     def __repr__(self):
@@ -306,6 +342,9 @@ class Object(object):
             props = {**self._properties, **other._properties}
             return Object(props)
 
+    def __contains__(self, item):
+        return item in self._properties
+
     def __getitem__(self, item):
         return self.get_property(item)
 
@@ -313,6 +352,9 @@ class Object(object):
         if not isinstance(value, Property):
             raise ValueError('Can only set a property with a Property object.')
         self.properties[key] = value
+
+    def __len__(self):
+        return len(self._properties)
 
 
 class Property(Extensible):
@@ -323,6 +365,11 @@ class Property(Extensible):
             self.measurements = []
         else:
             self.measurements = measurements
+
+    @classmethod
+    def from_property(cls, property):
+        msmts = [Measurement.from_measurement(m) for m in property.measurements]
+        return Property(property.name, msmts)
 
     def to_json(self):
         return pack_json(self, ['measurements'])
@@ -341,12 +388,17 @@ class Property(Extensible):
             rep += 'no measurements'
         return rep
 
+    def __len__(self):
+        return len(self.measurements)
+
     def add_measurement(self, value, error=None, reference=None, limit='=', quality=None, **kws):
         msmt = Measurement(value, error, reference, limit, quality, **kws)
         self.measurements.append(msmt)
 
 
 class Measurement(Extensible):
+    default_attributes = {'value', 'error', 'reference', 'limit', 'quality'}
+
     def __init__(self, value, error=None, reference=None, limit='=', quality=None, **kws):
         super(Measurement, self).__init__(**kws)
         self.value = value
@@ -354,6 +406,18 @@ class Measurement(Extensible):
         self.reference = reference
         self.limit = limit
         self.quality = quality
+
+    @classmethod
+    def from_measurement(cls, measurement):
+        m = measurement
+        ckeys = m.custom_attributes
+        cdict = {k: getattr(m, k) for k in ckeys}
+        return Measurement(m.value, m.error, m.reference, m.limit, m.quality,
+                           **cdict)
+
+    @property
+    def custom_attributes(self):
+        return set(self.__dict__.keys()) - self.default_attributes
 
     @property
     def simple_error(self):
