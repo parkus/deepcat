@@ -300,7 +300,6 @@ class Object(object):
         props = [Property.from_property(p) for p in object.properties]
         return Object(object.name, props)
 
-
     @classmethod
     def from_json(cls, s):
         d = json.loads(s)
@@ -324,6 +323,11 @@ class Object(object):
     @property
     def properties(self):
         return self._properties.values()
+
+    def add_measurement(self, property_name, value, error=None, reference=None, limit='=', quality=None, **kws):
+        if property_name not in self:
+            self._properties[property_name] = Property(property_name)
+        self[property_name].add_measurement(value, error, reference, limit, quality, **kws)
 
     @properties.setter
     def properties(self, value):
