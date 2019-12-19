@@ -9,32 +9,6 @@ from math import nan
 from . import choosers
 
 
-def pack_json(self, containers=None):
-    d = self.__dict__.copy()
-
-    # for each entry that is actually a list of objects, json serialize each of those objects
-    if containers is not None:
-        for key in containers:
-            objs = d[key]
-            jobjs = [obj.to_json() for obj in objs]
-            d[key] = jobjs
-
-    # now serialize the whole thing
-    return json.dumps(d)
-
-
-def unpack_json(s, containers=None, classes=None):
-    d = json.loads(s)
-
-    if containers is not None:
-        for key, ccls in zip(containers, classes):
-            jobjs = d[key]
-            objs = [ccls.from_json(jobj) for jobj in jobjs]
-            d[key] = objs
-
-    return d
-
-
 def make_column(name, values, dtype='guess'):
     good = list(filter(None, values))
 
@@ -97,7 +71,8 @@ class Catalog(object):
     @classmethod
     def _get_obj_paths(self, dir):
         search_str = pathjoin(dir, '*.object')
-        return glob(search_str)
+        paths = glob(search_str)
+        return sorted(paths)
 
     def write(self, path, overwrite=False):
         if exists(path):
@@ -283,7 +258,15 @@ class Object(object):
             self.properties = properties
 
     def to_json(self):
-        return pack_json(self, ['_properties'])
+        d = self.__dict__.copy()
+        props = d.pop('_properties')
+
+        # for each entry that is actually a list of objects, json serialize each of those objects
+        jprops = [prop.to_json() for prop in props.values()]
+        d['properties'] = jprops
+
+        # now serialize the whole thing
+        return json.dumps(d)
 
     @classmethod
     def from_object(cls, object):
@@ -293,8 +276,12 @@ class Object(object):
 
     @classmethod
     def from_json(cls, s):
-        d = unpack_json(s, ['_properties'], [Property])
-        return Object(**d)
+        d = json.loads(s)
+
+        jprops = d['properties']
+        props = [Property.from_json(ps) for ps in jprops]
+
+        return Object(d['name'], props)
 
     def __repr__(self):
         rep = self.name
@@ -372,11 +359,24 @@ class Property(Extensible):
         return Property(property.name, msmts)
 
     def to_json(self):
-        return pack_json(self, ['measurements'])
+        d = self.__dict__.copy()
+
+        # for each entry that is actually a list of objects, json serialize each of those objects
+        msmts = d.pop('measurements')
+        jmsmts = [m.to_json() for m in msmts]
+        d['measurements'] = jmsmts
+
+        # now serialize the whole thing
+        return json.dumps(d)
 
     @classmethod
     def from_json(cls, s):
-        d = unpack_json(s, ['measurements'], [Measurement])
+        d = json.loads(s)
+
+        jmsmts = d['measurements']
+        msmts = [Measurement.from_json(jm) for jm in jmsmts]
+        d['measurements'] = msmts
+
         return Property(**d)
 
     def __repr__(self):
