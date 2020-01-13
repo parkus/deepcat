@@ -107,12 +107,15 @@ class Catalog(object):
 
     def add_measurements(self, object_names, property_name, values, errors=None, references=None, limits=None, qualities=None):
         errors = [None]*len(self) if errors is None else errors
-        references = [None]*len(self) if references is None else references
+        if references is None:
+            references = [None]*len(self)
+        if type(references) is str:
+            references = [references]*len(self)
         limits = ['=']*len(self) if limits is None else limits
         qualities = [None]*len(self) if qualities is None else qualities
         args = zip(object_names, values, errors, references, limits, qualities)
         for name, v, e, r, l, q in args:
-            self[name][property_name].add_measurement(v, e, r, l, q)
+            self[name].add_measurement(property_name, v, e, r, l, q)
 
     @classmethod
     def read(cls, path):
@@ -127,7 +130,7 @@ class Catalog(object):
 
     @property
     def objects(self):
-        return self._objects.values()
+        return list(self._objects.values())
 
     def add_object(self, object):
         try:
@@ -176,13 +179,13 @@ class Catalog(object):
         else:
             props = []
             for oname, obj in self._objects.items():
+                rep = '{}: '.format(oname)
                 if name in obj:
                     prop = obj[name]
-                    rep = '{}: '.format(oname)
                     rep += ', '.join(map(str, prop.measurements))
-                    props.append(rep)
                 else:
-                    props.append('No {} property defined.'.format(name))
+                    rep += 'No {} property defined.'.format(name)
+                props.append(rep)
         print(name)
         print('='*len(name))
         [print(p) for p in props]
@@ -322,7 +325,7 @@ class Object(object):
 
     @property
     def properties(self):
-        return self._properties.values()
+        return list(self._properties.values())
 
     def add_measurement(self, property_name, value, error=None, reference=None, limit='=', quality=None, **kws):
         if property_name not in self:
