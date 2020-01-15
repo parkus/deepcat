@@ -372,7 +372,7 @@ class Object(object):
     def __setitem__(self, key, value):
         if not isinstance(value, Property):
             raise ValueError('Can only set a property with a Property object.')
-        self.properties[key] = value
+        self._properties[key] = value
 
     def __delitem__(self, key):
         del self._properties[key]
