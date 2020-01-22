@@ -291,12 +291,12 @@ class Object(object):
         d = self.__dict__.copy()
         props = d.pop('_properties')
 
-        # for each entry that is actually a list of objects, json serialize each of those objects
-        jprops = [prop.to_json() for prop in props.values()]
+        # for each entry that is actually a list of objects, get the dictionary form of each
+        jprops = [prop.json_ready() for prop in props.values()]
         d['properties'] = jprops
 
         # now serialize the whole thing
-        return json.dumps(d)
+        return json.dumps(d, indent=4)
 
     @classmethod
     def from_object(cls, object):
@@ -307,8 +307,8 @@ class Object(object):
     def from_json(cls, s):
         d = json.loads(s)
 
-        jprops = d['properties']
-        props = [Property.from_json(ps) for ps in jprops]
+        dprops = d['properties']
+        props = [Property.from_dict(dp) for dp in dprops]
 
         return Object(d['name'], props)
 
@@ -395,23 +395,25 @@ class Property(Extensible):
         msmts = [Measurement.from_measurement(m) for m in property.measurements]
         return Property(property.name, msmts)
 
-    def to_json(self):
+    def json_ready(self):
         d = self.__dict__.copy()
 
-        # for each entry that is actually a list of objects, json serialize each of those objects
+        # for each entry that is actually a list of objects, get the dictionary representation of each
         msmts = d.pop('measurements')
-        jmsmts = [m.to_json() for m in msmts]
+        jmsmts = [m.__dict__ for m in msmts]
         d['measurements'] = jmsmts
 
         # now serialize the whole thing
-        return json.dumps(d)
+        return d
 
     @classmethod
-    def from_json(cls, s):
-        d = json.loads(s)
-
-        jmsmts = d['measurements']
-        msmts = [Measurement.from_json(jm) for jm in jmsmts]
+    def from_dict(cls, d):
+        msmts = []
+        for msmt in d['measurements']:
+            for key in ['_value', '_error', '_reference', '_limit', '_quality']:
+                if key in msmt:
+                    msmt[key[1:]] = msmt.pop(key)
+            msmts.append(Measurement(**msmt))
         d['measurements'] = msmts
 
         return Property(**d)
@@ -524,19 +526,6 @@ class Measurement(Extensible):
             raise ValueError('Quality must be in the range [0,5].')
         else:
             self._quality = value
-
-    def to_json(self):
-        return json.dumps(self.__dict__)
-
-    @classmethod
-    def from_json(cls, s):
-        d = json.loads(s)
-        attrs = set(d.keys())
-        custom_attrs = attrs - {'value', '_error', '_limit' 'reference', '_quality'}
-        obj = cls(d['value'], d['_error'], d['reference'], d['_limit'], d['_quality'])
-        for key in custom_attrs:
-            obj.__setattr__(key, d[key])
-        return obj
 
     def __repr__(self):
         if type(self.value) is str:
