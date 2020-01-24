@@ -5,10 +5,11 @@ from os import remove, mkdir
 from os.path import join as pathjoin
 from astropy.table import Table, MaskedColumn
 from math import nan
-from warnings import warn
+import warnings
 
 from . import choosers
 
+warn = warnings.warn
 
 def make_column(name, values, dtype='guess'):
     good = list(filter(None, values))
@@ -68,6 +69,16 @@ class Catalog(object):
             self._chooser = value
         else:
             raise ValueError('Chooser can only be set with a string matching the name of a function in the choosers module or a user-defined function.')
+
+
+    def choose(self, property, quantity='value'):
+        values = []
+        for o in self.objects:
+            msmts = o[property].measurements
+            chosen_msmt = self.chooser(msmts)
+            value = getattr(chosen_msmt, quantity)
+            values.append(value)
+        return values
 
     @classmethod
     def _get_obj_paths(self, dir):
@@ -225,7 +236,7 @@ class Catalog(object):
 
         # add names of properties as keys (eventually to be column names) in each table dictionary
         if 'object' in self.property_names:
-            warn('Apparently the objets have a property called object. However, the object column in the tables will give the names of the objects, not their "object.object" property.')
+            warn('Apparently the objects have a property called object. However, the object column in the tables will give the names of the objects, not their "object.object" property.')
         for tbl in tables.values():
             index = MaskedColumn(self.object_names, name='object')
             tbl['object'] = index
@@ -233,13 +244,18 @@ class Catalog(object):
                 tbl[prop] = []
 
         # construct lists that will become tables
+        arbitrary_picks = []
         for obj in self.objects:
             # for each property, add the chosen measurement, if any, to the table
             for prop in props:
                 if prop in obj:
                     msmts = obj[prop].measurements
                     if len(msmts) > 0:
-                        msmt = self.chooser(msmts)
+                        with warnings.catch_warnings(record=True) as w:
+                            warnings.simplefilter('always')
+                            msmt = self.chooser(msmts)
+                            if len(w) > 0:
+                                arbitrary_picks.append([obj.name, prop])
                         tables['value'][prop].append(msmt.value)
                         tables['limit'][prop].append(msmt.limit)
                         tables['errpos'][prop].append(msmt.errpos)
@@ -249,6 +265,12 @@ class Catalog(object):
                         continue
                 for key in tables.keys():
                     tables[key][prop].append(None)
+        if len(arbitrary_picks) > 0:
+            msg = ('\nCould not select a "best" measurement according to the '
+                   'catalog\'s chooser for the following:')
+            for ap in arbitrary_picks:
+                msg += ('\n    {}: {}'.format(*ap))
+            warn(msg)
 
         # format columns for use in table: set Nones to masked values and infer data types
         for prop in props:
@@ -460,6 +482,8 @@ class Measurement(Extensible):
 
     @property
     def simple_error(self):
+        if self._error is None:
+            return None
         e1, e2 = self._error
         return (abs(e1) + abs(e2))/2.
 

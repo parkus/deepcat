@@ -1,6 +1,6 @@
 """For consistency, function in this module should always return a list of measurements (even if narrowed down to one) or an empty list."""
 from warnings import warn
-
+from math import inf
 
 def default(measurements):
     if len(measurements) == 0:
@@ -27,7 +27,8 @@ def default(measurements):
         msmts = most_precise(measurements)
 
         if len(msmts) > 1:
-            warn('Multiple measurements have the same quality and precision. Picking one arbitrarily.')
+            warn('Multiple measurements have the same quality and precision. '
+                 'Picking one arbitrarily.')
         return msmts[0]
 
 
@@ -49,10 +50,9 @@ def most_precise(measurements):
     if all(e is None for e in errors):
         return measurements
 
-    values = [m.value for m in measurements]
-    precisions = [e/v for e, v in zip(errors, values)]
-    min_precision = min(precisions)
-    keep = [p == min_precision for p in precisions]
+    errors = [inf if e is None else e for e in errors]
+    min_error = min(errors)
+    keep = [p == min_error for p in errors]
     return [m for m, k in zip(measurements, keep) if k]
 
 
