@@ -71,14 +71,17 @@ class Catalog(object):
             raise ValueError('Chooser can only be set with a string matching the name of a function in the choosers module or a user-defined function.')
 
 
-    def choose(self, property, quantity='value'):
-        values = []
-        for o in self.objects:
-            msmts = o[property].measurements
+    def choose(self, property, object='all', quantity='value', default=None):
+        if object == 'all':
+            values = [self.choose(property, o, quantity, default) for o in self.object_names]
+            return values
+        else:
+            msmts = self[object][property].measurements
             chosen_msmt = self.chooser(msmts)
+            if chosen_msmt == []:
+                return default
             value = getattr(chosen_msmt, quantity)
-            values.append(value)
-        return values
+            return value
 
     @classmethod
     def _get_obj_paths(self, dir):
