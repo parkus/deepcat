@@ -15,16 +15,16 @@ def default(measurements):
         if len(msmts) == 1:
             return msmts[0]
 
-        msmts = strictest_limit(measurements)
+        msmts = strictest_limit(msmts)
         if len(msmts) == 1:
             return msmts[0]
 
     if len(msmts) > 1:
-        msmts = highest_quality(measurements)
+        msmts = highest_quality(msmts)
         if len(msmts) == 1:
             return msmts[0]
 
-        msmts = most_precise(measurements)
+        msmts = most_precise(msmts)
 
         if len(msmts) > 1:
             warn('Multiple measurements have the same quality and precision. '
