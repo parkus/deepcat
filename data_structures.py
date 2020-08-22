@@ -555,16 +555,16 @@ class Measurement(Extensible):
             self._quality = value
 
     def __repr__(self):
-        if type(self.value) is str:
-            rep = self.value
+        if self.limit in '<>':
+            rep = self.limit
         else:
-            if self.limit in '<>':
-                rep = self.limit
-            else:
-                rep = ''
+            rep = ''
+        if type(self.value) is str:
+            rep += self.value
+        else:
             rep += '{:.3g}'.format(self.value)
-            if self.error is not None:
-                rep += ' +{:.3g}/{:.3g}'.format(*self._error)
+        if self.error is not None:
+            rep += ' +{:.3g}/{:.3g}'.format(*self._error)
         if self.reference is None:
             rep += ' (no ref)'
         else:
